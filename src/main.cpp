@@ -108,7 +108,7 @@ void setComfortLevelExpression() {
       // 快い
       avatar.setExpression(Expression::Happy);
       cp->set(COLOR_PRIMARY, TFT_BLACK);
-      cp->set(COLOR_BACKGROUND, 65531); // lightyellow : 65531
+vvv54      cp->set(COLOR_BACKGROUND, 65531); // lightyellow : 65531
     } else if (discomfort >= 70 && discomfort < 75) {
       // 暑くない
       avatar.setExpression(Expression::Neutral);
