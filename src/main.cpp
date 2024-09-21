@@ -101,41 +101,61 @@ int getDiscomfortIndex()
 // ----------------------------------------------------------------
 // メイン（setup, loop）
 // ----------------------------------------------------------------
-hw_timer_t * timer = NULL;  // タイマー設定
+unsigned long previousMillis = 0;  // 前回の時間を保存する変数
+unsigned long currentMillis = 0;
+const long interval = 1000;        // インターバルの長さ（ミリ秒）
 
-char speechText[100];  // フォーマットされた文字列を格納するためのバッファ
-bool isNatural = true;
-void onTimer(){
+void self_delay() {
+  currentMillis = millis();  // 現在の時間を取得
 
-  // sprintf(speechText, "気温 : %2.1f 'C", sensorData.temperature);
-  // avatar.setSpeechText(speechText);
-  // delay(3000);
-  // sprintf(speechText, "湿度 : %2.1f %c ", sensorData.humidity, '%');
-  // avatar.setSpeechText(speechText);
-  // delay(3000);
-  // sprintf(speechText, "気圧 : %4.1f hPa", sensorData.pressure);
-  // avatar.setSpeechText(speechText);
-  // delay(3000);
-  // sprintf(speechText, "CO2 : %d ppm", sensorData.co2);
-  // avatar.setSpeechText(speechText);
-  // delay(3000);
-  // sprintf(speechText, "不快指数 : %d", sensorData.discomfort);
-  // avatar.setSpeechText(speechText);
-  // delay(3000);
-  // sprintf(speechText, "角度 : %d", sensorData.angle);
-  // avatar.setSpeechText(speechText);
-  // delay(3000);
-
-  if (isNatural) {
-    avatar.setExpression(m5avatar::Expression::Happy);
-    sprintf(speechText, "I LV Beer!!");
-    isNatural = false;
-  } else {
-    avatar.setExpression(m5avatar::Expression::Neutral);
-    avatar.setSpeechText("No Beer.");
-    isNatural = true;
+  // 一定時間（interval）が経過したかチェック
+  if (currentMillis - previousMillis >= interval) {
+    previousMillis = currentMillis;  // 前回の時間を更新
+    Serial.println("1秒経過しました");
   }
 }
+
+char speechText[100];  // フォーマットされた文字列を格納するためのバッファ
+
+hw_timer_t *timer = NULL;  // タイマー設定
+
+
+volatile bool timerFlag = true;  // タイマー割り込みが発生したことを示すフラグ
+bool faceCol = true;
+// タイマー割り込み関数
+void IRAM_ATTR onTimer() {
+  timerFlag = true;  // フラグを立てる（定期的な処理の実行を指示）
+  if (faceCol) {
+    cp->set(COLOR_BACKGROUND, TFT_SKYBLUE);
+    avatar.setColorPalette(*cp);
+    faceCol = false;
+  } else {
+    cp->set(COLOR_BACKGROUND, TFT_MAROON);
+    avatar.setColorPalette(*cp);
+    faceCol = true;
+  }
+}
+
+// bool isNatural = true;
+// void onTimer(){
+//   self_delay();
+//   if (isNatural) {
+//     avatar.setExpression(m5avatar::Expression::Happy);
+//     avatar.setSpeechText("I LV Beer!!");
+//     isNatural = false;
+//   } else {
+//     avatar.setExpression(m5avatar::Expression::Neutral);
+//     avatar.setSpeechText("No Beer.");
+//     isNatural = true;
+//   }
+//   self_delay();
+//   self_delay();
+//   sprintf(speechText, "湿度 : %2.1f %c ", humidity, '%');
+//   avatar.setSpeechText(speechText);
+//   self_delay();
+//   // delay(3000);
+
+// }
 
 // ----------------------------------------------------------------
 // メイン（setup, loop）
@@ -203,7 +223,7 @@ void setup() {
   // タイマー設定
   timer = timerBegin(0, 80, true);
   timerAttachInterrupt(timer, &onTimer, true);
-  timerAlarmWrite(timer, 5000000, true); // だいたい5秒間隔でタイマーが発動
+  timerAlarmWrite(timer, 30000000, true); // だいたい30秒間隔でタイマーが発動 (設定値はマイクロ秒)
   timerAlarmEnable(timer);
 }
 
@@ -212,48 +232,72 @@ void loop() {
 
   M5.update();
 
+  // 定期的に実行される処理
+  if (timerFlag) {
 // ENV_IIIデータ取得
 #ifdef ENV_III
-  // 気圧を測定し構造体にセット
-  pressure = qmp6988.calcPressure() / 100;
-  if (sht30.update())
-  {
-    // 温度・湿度を測定し構造体にセット
-    temperature = sht30.cTemp;
-    humidity = sht30.humidity;
-  }
+    // 気圧を測定し構造体にセット
+    pressure = qmp6988.calcPressure() / 100;
+    if (sht30.update())
+    {
+      // 温度・湿度を測定し構造体にセット
+      temperature = sht30.cTemp;
+      humidity = sht30.humidity;
+    }
 #endif
 
 // SGP30データ取得
 #ifdef SGP30
-  if (!sgp.IAQmeasure())
-  { // eCo2 TVOC読込
-    Serial.println("Measurement failed");
-    while (1)
-      delay(1);
-  }
-  // CO2濃度を測定し構造体にセット
-  co2 = sgp.eCO2;
+    if (!sgp.IAQmeasure())
+    { // eCo2 TVOC読込
+      Serial.println("Measurement failed");
+      while (1)
+        delay(1);
+    }
+    // CO2濃度を測定し構造体にセット
+    co2 = sgp.eCO2;
 #endif
 
 // ENV_IIIで取得した温湿度を元に補正した絶対湿度をSGP30にセット
 #if defined(SGP30) && defined(ENV_III)
-  sgp.setHumidity(getAbsoluteHumidity());
+    sgp.setHumidity(getAbsoluteHumidity());
 #endif
 
-  // 不快指数の計算
-  // 50:寒さ上限
-  // 68:快適の中心
-  // 85:暑さ下限
-  discomfort = getDiscomfortIndex();
-  // 不快指数が限界値以上/以下の場合は限界値にリセット
-  if (discomfort < 50) discomfort = 50;
-  if (discomfort > 85) discomfort = 85;
+    // 不快指数の計算
+    // 50:寒さ上限
+    // 68:快適の中心
+    // 85:暑さ下限
+    discomfort = getDiscomfortIndex();
+    // 不快指数が限界値以上/以下の場合は限界値にリセット
+    if (discomfort < 50) discomfort = 50;
+    if (discomfort > 85) discomfort = 85;
 
-  // 不快指数を角度に変換：サーボの回転方向を考慮し不快指数の高低と角度の高低を反転
-  angle = 180 - map(discomfort, 50, 85, 0, 180);
-  setServoAngle(angle);
+    // 不快指数を角度に変換：サーボの回転方向を考慮し不快指数の高低と角度の高低を反転
+    angle = 180 - map(discomfort, 50, 85, 0, 180);
+    setServoAngle(angle);
 
-  // 30秒ごとにデータを取得
-  delay(30000);
+    // タイマー割込みのフラグをリセット
+    timerFlag = false;
+  }
+
+  // 常時実行される処理
+  sprintf(speechText, "気温 : %2.1f 'C", temperature);
+  avatar.setSpeechText(speechText);
+  delay(3000);
+  sprintf(speechText, "湿度 : %2.1f %c ", humidity, '%');
+  avatar.setSpeechText(speechText);
+  delay(3000);
+  sprintf(speechText, "気圧 : %4.1f hPa", pressure);
+  avatar.setSpeechText(speechText);
+  delay(3000);
+  sprintf(speechText, "CO2 : %d ppm", co2);
+  avatar.setSpeechText(speechText);
+  delay(3000);
+  sprintf(speechText, "不快指数 : %d", discomfort);
+  avatar.setSpeechText(speechText);
+  delay(3000);
+  sprintf(speechText, "角度 : %d", angle);
+  avatar.setSpeechText(speechText);
+  delay(3000);
+
 }
