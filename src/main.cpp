@@ -30,24 +30,12 @@ void setServoAngle(int angle) {
 // センサー関連
 
 // センサーデータ用変数
-float temperature = 25.5;   // 気温
-float humidity = 60.2;      // 湿度
-float pressure = 1013.25;      // 気圧
+float temperature = 0.0;   // 気温
+float humidity = 0.0;      // 湿度
+float pressure = 1000.0;   // 気圧
 uint16_t co2 = 400;        // CO2濃度
-uint16_t discomfort = 74; // 不快指数
+uint16_t discomfort = 70;  // 不快指数
 uint16_t angle = 180;      // 設定角度
-
-// // センサーデータ格納用構造体
-// struct SensorData {
-//     float temperature;   // 気温
-//     float humidity;      // 湿度
-//     float pressure;      // 気圧
-//     uint16_t co2;        // CO2濃度
-//     uint16_t discomfort; // 不快指数
-//     uint16_t angle;      // 設定角度
-// };
-// // 構造体の変数を宣言し、初期化
-// struct SensorData sensorData = {25.5, 60.2, 1013.25, 400};
 
 #define ENV_III // ENV_III使用しない場合はコメントアウト
 #define SGP30   // SGP30使用しない場合はコメントアウト
@@ -98,64 +86,62 @@ int getDiscomfortIndex()
   return (int)discomfortIndex;
 }
 
-// ----------------------------------------------------------------
-// メイン（setup, loop）
-// ----------------------------------------------------------------
-unsigned long previousMillis = 0;  // 前回の時間を保存する変数
-unsigned long currentMillis = 0;
-const long interval = 1000;        // インターバルの長さ（ミリ秒）
-
-void self_delay() {
-  currentMillis = millis();  // 現在の時間を取得
-
-  // 一定時間（interval）が経過したかチェック
-  if (currentMillis - previousMillis >= interval) {
-    previousMillis = currentMillis;  // 前回の時間を更新
-    Serial.println("1秒経過しました");
-  }
+// 不快指数値によるアバターのセット（顔色、表情）
+// 色見本 : https://rgbcolorpicker.com/565/table
+void setComfortLevelExpression() {
+    if (discomfort >= 50 && discomfort < 55) {
+      // 寒い
+      avatar.setExpression(Expression::Sad);
+      cp->set(COLOR_PRIMARY, TFT_WHITE);
+      cp->set(COLOR_BACKGROUND, TFT_BLUE);
+    } else if (discomfort >= 55 && discomfort < 60) {
+      // 肌寒い
+      avatar.setExpression(Expression::Doubt);
+      cp->set(COLOR_PRIMARY, TFT_WHITE);
+      cp->set(COLOR_BACKGROUND, TFT_SKYBLUE);
+    } else if (discomfort >= 60 && discomfort < 65) {
+      // 何も感じない
+      avatar.setExpression(Expression::Neutral);
+      cp->set(COLOR_PRIMARY, TFT_BLACK);
+      cp->set(COLOR_BACKGROUND, TFT_WHITE);
+    } else if (discomfort >= 65 && discomfort < 70) {
+      // 快い
+      avatar.setExpression(Expression::Happy);
+      cp->set(COLOR_PRIMARY, TFT_BLACK);
+      cp->set(COLOR_BACKGROUND, 65531); // lightyellow : 65531
+    } else if (discomfort >= 70 && discomfort < 75) {
+      // 暑くない
+      avatar.setExpression(Expression::Neutral);
+      cp->set(COLOR_PRIMARY, TFT_WHITE);
+      cp->set(COLOR_BACKGROUND, TFT_GOLD);
+    } else if (discomfort >= 75 && discomfort < 80) {
+      // やや暑い
+      avatar.setExpression(Expression::Doubt);
+      cp->set(COLOR_PRIMARY, TFT_WHITE);
+      cp->set(COLOR_BACKGROUND, TFT_ORANGE);
+    } else if (discomfort >= 80 && discomfort < 85) {
+      // 暑くて汗が出る
+      avatar.setExpression(Expression::Angry);
+      cp->set(COLOR_PRIMARY, TFT_WHITE);
+      cp->set(COLOR_BACKGROUND, TFT_MAROON);
+    } else {
+      // 範囲外の値(デフォルト)
+      cp->set(COLOR_PRIMARY, TFT_WHITE);
+      cp->set(COLOR_BACKGROUND, TFT_GOLD);
+    }
+    avatar.setColorPalette(*cp);
 }
 
-char speechText[100];  // フォーマットされた文字列を格納するためのバッファ
-
+// ----------------------------------------------------------------
+// タイマー
+// ----------------------------------------------------------------
 hw_timer_t *timer = NULL;  // タイマー設定
-
-
 volatile bool timerFlag = true;  // タイマー割り込みが発生したことを示すフラグ
-bool faceCol = true;
+
 // タイマー割り込み関数
 void IRAM_ATTR onTimer() {
   timerFlag = true;  // フラグを立てる（定期的な処理の実行を指示）
-  if (faceCol) {
-    cp->set(COLOR_BACKGROUND, TFT_SKYBLUE);
-    avatar.setColorPalette(*cp);
-    faceCol = false;
-  } else {
-    cp->set(COLOR_BACKGROUND, TFT_MAROON);
-    avatar.setColorPalette(*cp);
-    faceCol = true;
-  }
 }
-
-// bool isNatural = true;
-// void onTimer(){
-//   self_delay();
-//   if (isNatural) {
-//     avatar.setExpression(m5avatar::Expression::Happy);
-//     avatar.setSpeechText("I LV Beer!!");
-//     isNatural = false;
-//   } else {
-//     avatar.setExpression(m5avatar::Expression::Neutral);
-//     avatar.setSpeechText("No Beer.");
-//     isNatural = true;
-//   }
-//   self_delay();
-//   self_delay();
-//   sprintf(speechText, "湿度 : %2.1f %c ", humidity, '%');
-//   avatar.setSpeechText(speechText);
-//   self_delay();
-//   // delay(3000);
-
-// }
 
 // ----------------------------------------------------------------
 // メイン（setup, loop）
@@ -228,6 +214,8 @@ void setup() {
 }
 
 // ----------------------------------------------------------------
+char speechText[100];  // フォーマットされた文字列を格納するためのバッファ
+// ----------------------------------------------------------------
 void loop() {
 
   M5.update();
@@ -276,11 +264,17 @@ void loop() {
     angle = 180 - map(discomfort, 50, 85, 0, 180);
     setServoAngle(angle);
 
+    // 表情と顔色の変更
+    setComfortLevelExpression();
+
     // タイマー割込みのフラグをリセット
     timerFlag = false;
   }
 
   // 常時実行される処理
+  // 現在のセンサーデータの表示
+// ENV_IIIデータ取得
+#ifdef ENV_III
   sprintf(speechText, "気温 : %2.1f 'C", temperature);
   avatar.setSpeechText(speechText);
   delay(3000);
@@ -290,9 +284,13 @@ void loop() {
   sprintf(speechText, "気圧 : %4.1f hPa", pressure);
   avatar.setSpeechText(speechText);
   delay(3000);
+#endif
+// SGP30データ取得
+#ifdef SGP30
   sprintf(speechText, "CO2 : %d ppm", co2);
   avatar.setSpeechText(speechText);
   delay(3000);
+#endif
   sprintf(speechText, "不快指数 : %d", discomfort);
   avatar.setSpeechText(speechText);
   delay(3000);
