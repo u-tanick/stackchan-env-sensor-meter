@@ -108,7 +108,7 @@ void setComfortLevelExpression() {
       // 快い
       avatar.setExpression(Expression::Happy);
       cp->set(COLOR_PRIMARY, TFT_BLACK);
-vvv54      cp->set(COLOR_BACKGROUND, 65531); // lightyellow : 65531
+      cp->set(COLOR_BACKGROUND, 65531); // lightyellow : 65531
     } else if (discomfort >= 70 && discomfort < 75) {
       // 暑くない
       avatar.setExpression(Expression::Neutral);
@@ -294,8 +294,8 @@ void loop() {
   sprintf(speechText, "不快指数 : %d", discomfort);
   avatar.setSpeechText(speechText);
   delay(3000);
-  sprintf(speechText, "角度 : %d", angle);
-  avatar.setSpeechText(speechText);
-  delay(3000);
+  // sprintf(speechText, "角度 : %d", angle);
+  // avatar.setSpeechText(speechText);
+  // delay(3000);
 
 }
